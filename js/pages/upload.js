@@ -56,7 +56,7 @@ const UploadPage = {
         const form = document.getElementById('upload-form');
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            alert('File uploaded successfully! It will be visible after admin verification.');
+            alert('File uploaded successfully! It is now live on the platform.');
             navigateTo('home');
         });
     }

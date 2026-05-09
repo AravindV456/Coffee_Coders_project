@@ -9,6 +9,13 @@ function renderApp() {
     const appContainer = document.getElementById('app');
     appContainer.innerHTML = '';
 
+    // Apply theme to body
+    if (AppState.theme === 'light') {
+        document.body.classList.add('light-mode');
+    } else {
+        document.body.classList.remove('light-mode');
+    }
+
     if (AppState.currentPage === 'login' || AppState.currentPage === 'signup') {
         appContainer.innerHTML = AuthPage.render();
         AuthPage.init();

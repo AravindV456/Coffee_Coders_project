@@ -4,7 +4,7 @@ const Sidebar = {
             <aside class="sidebar ${AppState.sidebarOpen ? '' : 'sidebar-hidden'}" id="sidebar">
                 <div style="margin-bottom: 2.5rem; display: flex; align-items: center; gap: 12px; padding: 0 10px;">
                     <div style="width: 32px; height: 32px; background: var(--accent-primary); border-radius: 8px; box-shadow: var(--neon-glow);"></div>
-                    <span style="font-weight: 700; font-size: 1.25rem; letter-spacing: -0.5px;">GoHack</span>
+                    <span style="font-weight: 700; font-size: 1.25rem; letter-spacing: -0.5px;">StudySearch</span>
                 </div>
 
                 <nav style="flex: 1;">

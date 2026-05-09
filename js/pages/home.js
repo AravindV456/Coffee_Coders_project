@@ -40,7 +40,7 @@ const HomePage = {
                 </div>
                 <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem;">${title}</h3>
                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">${topic}</p>
-                <p style="color: var(--text-muted); font-size: 0.8rem;">Uploaded by <b>${uploader}</b></p>
+                <p style="color: var(--text-muted); font-size: 0.8rem;"><b>${uploader}</b></p>
                 
                 <div class="card-actions">
                     <button class="action-btn">${Icons.ArrowUp()} <span>124</span></button>

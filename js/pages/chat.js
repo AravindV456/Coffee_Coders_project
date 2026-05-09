@@ -14,8 +14,8 @@ const ChatPage = {
                             <input type="text" class="input-field" style="margin: 0; padding: 8px 12px; font-size: 0.9rem;" placeholder="Search chats...">
                         </div>
                         <div style="flex: 1; overflow-y: auto;">
-                            ${this.renderChatItem('Admin: John Doe', 'How can I help you?', '2m ago', true)}
-                            ${this.renderChatItem('Admin: Jane Smith', 'The file was approved.', '1h ago', false)}
+                            ${this.renderChatItem('John Doe', 'How can I help you?', '2m ago', true)}
+                            ${this.renderChatItem('Jane Smith', 'The file was approved.', '1h ago', false)}
                             ${this.renderChatItem('Support Bot', 'Welcome to GoHack!', 'Yesterday', false)}
                         </div>
                     </div>
@@ -26,7 +26,7 @@ const ChatPage = {
                             <div class="flex items-center gap-3">
                                 <div style="width: 36px; height: 36px; background: var(--accent-secondary); border-radius: 50%;"></div>
                                 <div>
-                                    <p style="font-weight: 600; font-size: 0.9rem;">Admin: John Doe</p>
+                                    <p style="font-weight: 600; font-size: 0.9rem;">John Doe</p>
                                     <p style="font-size: 0.7rem; color: var(--accent-primary);">Online</p>
                                 </div>
                             </div>
