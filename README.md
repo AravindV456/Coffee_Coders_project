@@ -3,10 +3,10 @@
 ## Team Name: Coffee Coders
 
 **Problem Statement**  
-Students don't have ease of access to notes, PYQs, or proper guidance on the subjects, or even how to approach the exam.
+Students don't have ease of access to notes, PYQs, or proper guidance on the subjects, or even how to approach the exam.They have to rely on multiple sources which are not centered in one place for note, which is not ideal.
 
 **Solution**  
-An online web platform for accessing and uploading notes, PYQs, references, etc. Easily search with keywords to access the files needed which are uploaded by other users. Also provides a feature to chat with the peers and users who uploaded the note to ask doubts. Upvotes and downvotes to grade the notes uploaded and can be used to recommend it to users based on the upvote count.
+An online web platform for accessing and uploading notes, PYQs, references, etc. Easily search with keywords to access the files needed which are uploaded by other users. Also provides a feature to chat with the peers and users who uploaded the note to ask doubts. Upvotes and downvotes to grade the notes uploaded and can be used to recommend it to users based on the upvote count.The home page search bar filters hundreds of notes instantly without making additional database requests.It combines cloud-storage file sharing, real-time peer-to-peer messaging, and an intuitive, dynamic user interface to make finding and discussing study materials completely frictionless.
 
 ---
 
@@ -16,7 +16,7 @@ An online web platform for accessing and uploading notes, PYQs, references, etc.
 - **Backend/BaaS**: Firebase
   - **Firebase Authentication**: For secure user login and registration
   - **Firestore (NoSQL)**: Real-time database for users, notes, votes, and E2E chat messages
-  - **Firebase Storage**: Cloud storage for hosting uploaded PDFs and documents
+  - **File Storage (Supabase)**: Supabase Storage is utilized as a highly performant cloud bucket for hosting uploaded PDFs, DOCXs, and images.
 - **Version Control**: Git & GitHub
 
 ---
