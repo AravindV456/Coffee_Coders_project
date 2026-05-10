@@ -1,4 +1,4 @@
-import { collection, query, onSnapshot, addDoc, serverTimestamp, orderBy, getDocs } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, orderBy, getDocs, doc, updateDoc, setDoc, increment } from "firebase/firestore";
 import { db } from "../firebase.js";
 
 let currentChatUser = null;
@@ -53,28 +53,18 @@ window.ChatPage = {
             return;
         }
 
-        // Fetch active chats
+        // Fetch active chats from AppState
         try {
-            let activeChats = JSON.parse(localStorage.getItem('activeChats') || '{}');
-            let myChats = activeChats[AppState.user.uid] || [];
+            let myChats = AppState.activeChats || [];
             
-            // If target passed from profile, ensure they are in the list
+            // If target passed from profile, ensure they are in the list locally for UI until Firestore catches up
             if (AppState.pageData && AppState.pageData.targetUid) {
                 if (!myChats.some(u => u.uid === AppState.pageData.targetUid)) {
-                    myChats.push({ uid: AppState.pageData.targetUid, name: AppState.pageData.targetName });
-                    activeChats[AppState.user.uid] = myChats;
-                    localStorage.setItem('activeChats', JSON.stringify(activeChats));
+                    myChats.unshift({ uid: AppState.pageData.targetUid, name: AppState.pageData.targetName, unreadCount: 0 });
                 }
             }
 
             const usersList = document.getElementById('chat-users-list');
-
-            if (myChats.length === 0) {
-                usersList.innerHTML = '<div style="padding: 1rem; color: var(--text-muted);">No active chats. Visit a user\'s profile to message them.</div>';
-                // Remove pageData target so we don't accidentally open it again if returning
-                AppState.pageData = null;
-                return;
-            }
 
             const usersSnapshot = await getDocs(collection(db, "users"));
             let allUsers = [];
@@ -84,29 +74,46 @@ window.ChatPage = {
                 }
             });
 
-            const renderUsers = (searchQuery = '') => {
+            this.renderUsers = (searchQuery = '') => {
+                const listEl = document.getElementById('chat-users-list');
+                if (!listEl) return;
+                
+                let myChats = AppState.activeChats || [];
                 let html = '';
-                allUsers.forEach(userData => {
-                    const isMatch = searchQuery && (
-                        userData.name.toLowerCase().includes(searchQuery) ||
-                        (userData.course && userData.course.toLowerCase().includes(searchQuery))
-                    );
-                    const isActive = myChats.some(u => u.uid === userData.id);
-                    
-                    if ((!searchQuery && isActive) || isMatch) {
+                
+                // If not searching, just show active chats
+                if (!searchQuery) {
+                    myChats.forEach(chatData => {
                         html += `
-                            <div class="chat-user-item" data-uid="${userData.id}" data-name="${userData.name}" style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
-                                <p style="font-weight: 600; font-size: 0.9rem;">${userData.name}</p>
-                                <p style="font-size: 0.8rem; color: var(--text-secondary);">${userData.course || ''}</p>
+                            <div class="chat-user-item" data-uid="${chatData.uid}" data-name="${chatData.name}" style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
+                                <div class="flex justify-between items-center">
+                                    <p style="font-weight: 600; font-size: 0.9rem; margin: 0;">${chatData.name}</p>
+                                    ${chatData.unreadCount && chatData.unreadCount > 0 ? `<span style="background: #ff4d4d; color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; font-weight: bold;">${chatData.unreadCount}</span>` : ''}
+                                </div>
+                                <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${chatData.lastMessage || 'No messages yet'}</p>
                             </div>
                         `;
-                    }
-                });
+                    });
+                } else {
+                    allUsers.forEach(userData => {
+                        const isMatch = userData.name.toLowerCase().includes(searchQuery) ||
+                            (userData.course && userData.course.toLowerCase().includes(searchQuery));
+                        
+                        if (isMatch) {
+                            html += `
+                                <div class="chat-user-item" data-uid="${userData.id}" data-name="${userData.name}" style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
+                                    <p style="font-weight: 600; font-size: 0.9rem; margin: 0;">${userData.name}</p>
+                                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0;">${userData.course || ''}</p>
+                                </div>
+                            `;
+                        }
+                    });
+                }
                 
                 if (html === '') {
-                    html = searchQuery ? '<div style="padding: 1rem; color: var(--text-muted);">No users found.</div>' : '<div style="padding: 1rem; color: var(--text-muted);">No active chats.</div>';
+                    html = searchQuery ? '<div style="padding: 1rem; color: var(--text-muted);">No users found.</div>' : '<div style="padding: 1rem; color: var(--text-muted);">No active chats. Visit a user\'s profile to message them.</div>';
                 }
-                usersList.innerHTML = html;
+                listEl.innerHTML = html;
                 
                 // Bind click listeners
                 document.querySelectorAll('.chat-user-item').forEach(item => {
@@ -122,13 +129,13 @@ window.ChatPage = {
             };
 
             // Initial render
-            renderUsers();
+            this.renderUsers();
 
             // Add search listener
             const searchInput = document.getElementById('chat-user-search');
             if (searchInput) {
                 searchInput.addEventListener('input', (e) => {
-                    renderUsers(e.target.value.toLowerCase());
+                    this.renderUsers(e.target.value.toLowerCase());
                 });
             }
             // If opened with targetUid, open the chat automatically
@@ -163,8 +170,27 @@ window.ChatPage = {
                     text: text,
                     senderId: AppState.user.uid,
                     senderName: AppState.user.name,
-                    createdAt: serverTimestamp()
+                    createdAt: serverTimestamp(),
+                    read: false
                 });
+                
+                // Ensure user is in active chats in Firestore
+                await setDoc(doc(db, "users", AppState.user.uid, "activeChats", currentChatUser.uid), {
+                    uid: currentChatUser.uid,
+                    name: currentChatUser.name,
+                    lastMessage: text,
+                    unreadCount: 0,
+                    timestamp: serverTimestamp()
+                }, { merge: true });
+                
+                await setDoc(doc(db, "users", currentChatUser.uid, "activeChats", AppState.user.uid), {
+                    uid: AppState.user.uid,
+                    name: AppState.user.name,
+                    lastMessage: text,
+                    unreadCount: increment(1),
+                    timestamp: serverTimestamp()
+                }, { merge: true });
+                
             } catch (error) {
                 console.error("Error sending message:", error);
                 alert("Failed to send message.");
@@ -178,6 +204,11 @@ window.ChatPage = {
     
     openChat(targetUid, targetName) {
         currentChatUser = { uid: targetUid, name: targetName };
+        
+        // Mark as read in Firestore
+        setDoc(doc(db, "users", AppState.user.uid, "activeChats", targetUid), {
+            unreadCount: 0
+        }, { merge: true }).catch(console.error);
         
         // Update header
         document.getElementById('chat-header').innerHTML = `
@@ -207,14 +238,20 @@ window.ChatPage = {
         
         unsubscribeMessages = onSnapshot(q, (snapshot) => {
             let html = '';
-            snapshot.forEach(doc => {
-                const data = doc.data();
+            snapshot.forEach(msgDoc => {
+                const data = msgDoc.data();
                 const isMe = data.senderId === AppState.user.uid;
                 
+                if (!isMe && data.read === false) {
+                    updateDoc(doc(db, "chats", chatId, "messages", msgDoc.id), { read: true }).catch(console.error);
+                }
+                
                 if (isMe) {
+                    const receiptIcon = data.read ? `<span style="color: #00e6e6; margin-left: 4px; vertical-align: middle;">${Icons.CheckDouble()}</span>` : `<span style="color: rgba(255,255,255,0.5); margin-left: 4px; vertical-align: middle;">${Icons.Check()}</span>`;
                     html += `
                         <div style="align-self: flex-end; max-width: 70%; background: var(--accent-primary); color: #000; padding: 10px 14px; border-radius: 12px 12px 0 12px; font-size: 0.9rem; font-weight: 500;">
                             ${data.text}
+                            ${receiptIcon}
                         </div>
                     `;
                 } else {

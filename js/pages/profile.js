@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase.js";
 
 window.ProfilePage = {
@@ -84,6 +84,7 @@ window.ProfilePage = {
         const uid = AppState.user ? AppState.user.uid : null;
         const isUpvoted = uid && upvotedBy.includes(uid);
         const isDownvoted = uid && downvotedBy.includes(uid);
+        const isOwner = uid === uploaderId;
         
         return `
             <div class="note-card" style="cursor: pointer;" onclick="window.handleViewAndOpen('${id}', '${fileUrl}', '${title.replace(/'/g, "\\'")}', '${topic.replace(/'/g, "\\'")}', '${uploader.replace(/'/g, "\\'")}')">
@@ -98,6 +99,7 @@ window.ProfilePage = {
                 <div class="card-actions">
                     <button class="action-btn" style="color: ${isUpvoted ? 'var(--accent-primary)' : 'inherit'};" onclick="window.handleVote('${id}', 'up', event)">${Icons.ArrowUp()} <span>${upvotes}</span></button>
                     <button class="action-btn" style="color: ${isDownvoted ? '#ff4d4d' : 'inherit'};" onclick="window.handleVote('${id}', 'down', event)">${Icons.ArrowDown()} <span>${downvotes}</span></button>
+                    ${isOwner ? `<button class="action-btn" style="color: #ff4d4d; margin-left: auto;" onclick="window.handleDelete('${id}', event)">${Icons.Trash()} <span style="margin-left: 4px;">Delete</span></button>` : ''}
                 </div>
             </div>
         `;
@@ -132,20 +134,27 @@ window.ProfilePage = {
             });
         }
         
-        // Fetch user notes
         const feedGrid = document.getElementById('profile-feed-grid');
         if (feedGrid && AppState.user && AppState.user.uid) {
             try {
-                const q = query(collection(db, "notes"), where("uploaderId", "==", AppState.user.uid), orderBy("createdAt", "desc"));
+                const q = query(collection(db, "notes"), where("uploaderId", "==", AppState.user.uid));
                 getDocs(q).then(querySnapshot => {
                     if (querySnapshot.empty) {
                         feedGrid.innerHTML = '<div style="color: var(--text-muted);">You haven\'t uploaded any notes yet.</div>';
                     } else {
                         let html = '';
+                        let notes = [];
                         querySnapshot.forEach((doc) => {
-                            const data = doc.data();
+                            notes.push({ id: doc.id, ...doc.data() });
+                        });
+                        notes.sort((a, b) => {
+                            const timeA = a.createdAt ? a.createdAt.toMillis() : 0;
+                            const timeB = b.createdAt ? b.createdAt.toMillis() : 0;
+                            return timeB - timeA;
+                        });
+                        notes.forEach((data) => {
                             html += this.renderNoteCard(
-                                doc.id,
+                                data.id,
                                 data.subject,
                                 data.topic,
                                 data.category,

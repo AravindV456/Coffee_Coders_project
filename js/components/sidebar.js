@@ -17,6 +17,7 @@ window.Sidebar = {
                     </div>
                     <div class="nav-link ${AppState.currentPage === 'chat' ? 'active' : ''}" data-page="chat">
                         ${Icons.MessageCircle()} <span>Chat</span>
+                        ${AppState.totalUnread > 0 ? `<span class="notification-badge" style="background: #ff4d4d; color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; font-weight: bold; margin-left: auto;">${AppState.totalUnread}</span>` : ''}
                     </div>
                 </nav>
 

@@ -10,15 +10,20 @@ import './pages/settings.js';
 import './pages/chat.js';
 import './pages/publicProfile.js';
 import { db, auth } from './firebase.js';
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
+import { supabase } from './supabase.js';
 
 window.AppState = {
     user: null,
     currentPage: 'login', // login, signup, home, profile, recents, upload, settings, chat
     theme: 'dark',
-    sidebarOpen: true
+    sidebarOpen: true,
+    activeChats: [],
+    totalUnread: 0
 };
+
+let activeChatsUnsubscribe = null;
 
 window.renderApp = function() {
     const appContainer = document.getElementById('app');
@@ -147,6 +152,49 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (AppState.currentPage === 'login' || AppState.currentPage === 'signup') {
                         AppState.currentPage = 'home';
                     }
+                    
+                    if (!activeChatsUnsubscribe) {
+                        activeChatsUnsubscribe = onSnapshot(collection(db, "users", user.uid, "activeChats"), (snapshot) => {
+                            let chats = [];
+                            let unreadCount = 0;
+                            snapshot.forEach(doc => {
+                                const data = doc.data();
+                                chats.push(data);
+                                if (data.unreadCount > 0) {
+                                    unreadCount += data.unreadCount;
+                                }
+                            });
+                            chats.sort((a, b) => {
+                                const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
+                                const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
+                                return timeB - timeA;
+                            });
+                            AppState.activeChats = chats;
+                            AppState.totalUnread = unreadCount;
+                            
+                            // If sidebar is visible, we might want to re-render just the sidebar or the app
+                            if (AppState.user && AppState.currentPage !== 'login' && AppState.currentPage !== 'signup') {
+                                const chatNavBtn = document.querySelector('.nav-link[data-page="chat"]');
+                                if (chatNavBtn) {
+                                    const badge = chatNavBtn.querySelector('.notification-badge');
+                                    if (AppState.totalUnread > 0) {
+                                        if (badge) {
+                                            badge.innerText = AppState.totalUnread;
+                                        } else {
+                                            chatNavBtn.innerHTML += `<span class="notification-badge" style="background: #ff4d4d; color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; font-weight: bold; margin-left: auto;">${AppState.totalUnread}</span>`;
+                                        }
+                                    } else {
+                                        if (badge) badge.remove();
+                                    }
+                                }
+                                
+                                // Also trigger ChatPage re-render if we are on the chat page
+                                if (AppState.currentPage === 'chat' && window.ChatPage && typeof window.ChatPage.renderUsers === 'function') {
+                                    window.ChatPage.renderUsers();
+                                }
+                            }
+                        });
+                    }
                     renderApp();
                 } catch(e) {
                     console.error(e);
@@ -154,6 +202,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             AppState.user = null;
+            AppState.activeChats = [];
+            AppState.totalUnread = 0;
+            if (activeChatsUnsubscribe) {
+                activeChatsUnsubscribe();
+                activeChatsUnsubscribe = null;
+            }
             if (AppState.currentPage !== 'login' && AppState.currentPage !== 'signup') {
                 AppState.currentPage = 'login';
                 renderApp();
@@ -234,5 +288,36 @@ window.handleViewAndOpen = async function(noteId, fileUrl, title, topic, uploade
         renderApp();
     } catch (e) {
         console.error("Error updating views:", e);
+    }
+};
+
+window.handleDelete = async function(noteId, event) {
+    event.stopPropagation();
+    if (!confirm("Are you sure you want to delete this material?")) return;
+    
+    try {
+        const noteRef = doc(db, 'notes', noteId);
+        const noteSnap = await getDoc(noteRef);
+        if (noteSnap.exists()) {
+            const data = noteSnap.data();
+            const fileUrl = data.fileUrl;
+            let storagePath = null;
+            if (fileUrl && fileUrl.includes('/materials/')) {
+                storagePath = fileUrl.split('/materials/')[1];
+                storagePath = decodeURIComponent(storagePath);
+            }
+            
+            if (storagePath) {
+                const { error } = await supabase.storage.from('materials').remove([storagePath]);
+                if (error) console.error("Error deleting from storage:", error);
+            }
+        }
+        
+        await deleteDoc(noteRef);
+        alert("Material deleted successfully.");
+        renderApp();
+    } catch (e) {
+        console.error("Error deleting note:", e);
+        alert("Failed to delete material.");
     }
 };

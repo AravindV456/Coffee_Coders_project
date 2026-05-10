@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, orderBy, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase.js";
 
 window.PublicProfilePage = {
@@ -86,16 +86,24 @@ window.PublicProfilePage = {
         // Fetch user notes
         const feedGrid = document.getElementById('public-feed-grid');
         try {
-            const q = query(collection(db, "notes"), where("uploaderId", "==", targetUid), orderBy("createdAt", "desc"));
+            const q = query(collection(db, "notes"), where("uploaderId", "==", targetUid));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
                 feedGrid.innerHTML = '<div style="color: var(--text-muted);">No notes uploaded yet.</div>';
             } else {
                 let html = '';
+                let notes = [];
                 querySnapshot.forEach((doc) => {
-                    const data = doc.data();
+                    notes.push({ id: doc.id, ...doc.data() });
+                });
+                notes.sort((a, b) => {
+                    const timeA = a.createdAt ? a.createdAt.toMillis() : 0;
+                    const timeB = b.createdAt ? b.createdAt.toMillis() : 0;
+                    return timeB - timeA;
+                });
+                notes.forEach((data) => {
                     html += window.HomePage.renderNoteCard(
-                        doc.id,
+                        data.id,
                         data.subject,
                         data.topic,
                         data.category,
