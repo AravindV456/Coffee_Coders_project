@@ -9,8 +9,9 @@ import './pages/upload.js';
 import './pages/settings.js';
 import './pages/chat.js';
 import './pages/publicProfile.js';
-import { db } from './firebase.js';
+import { db, auth } from './firebase.js';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 window.AppState = {
     user: null,
@@ -134,6 +135,32 @@ window.navigateTo = function(page, data = null) {
 // Initial render
 document.addEventListener('DOMContentLoaded', () => {
     initParticles();
+    
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            if (!AppState.user) {
+                try {
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) {
+                        AppState.user = { uid: user.uid, ...userDoc.data() };
+                    }
+                    if (AppState.currentPage === 'login' || AppState.currentPage === 'signup') {
+                        AppState.currentPage = 'home';
+                    }
+                    renderApp();
+                } catch(e) {
+                    console.error(e);
+                }
+            }
+        } else {
+            AppState.user = null;
+            if (AppState.currentPage !== 'login' && AppState.currentPage !== 'signup') {
+                AppState.currentPage = 'login';
+                renderApp();
+            }
+        }
+    });
+
     renderApp();
 });
 

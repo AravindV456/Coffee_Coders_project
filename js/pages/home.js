@@ -16,7 +16,7 @@ window.HomePage = {
         `;
     },
 
-    renderNoteCard(id, title, topic, type, views, uploader, uploaderId, upvotedBy = [], downvotedBy = [], viewedBy = [], fileUrl) {
+    renderNoteCard(id, title, topic, type, views, uploader, uploaderId, upvotedBy = [], downvotedBy = [], viewedBy = [], fileUrl, scheme = '', semester = '', unit = '') {
         const typeClass = type ? type.toLowerCase().replace(' ', '-') : 'notes';
         const upvotes = upvotedBy.length;
         const downvotes = downvotedBy.length;
@@ -25,8 +25,10 @@ window.HomePage = {
         const isUpvoted = uid && upvotedBy.includes(uid);
         const isDownvoted = uid && downvotedBy.includes(uid);
         
+        const searchTags = `${title} ${topic} ${type} ${scheme} ${semester} ${unit} ${uploader}`.toLowerCase();
+        
         return `
-            <div class="note-card" style="cursor: pointer;" onclick="window.handleViewAndOpen('${id}', '${fileUrl}')">
+            <div class="note-card" data-search-tags="${searchTags}" style="cursor: pointer;" onclick="window.handleViewAndOpen('${id}', '${fileUrl}', '${title.replace(/'/g, "\\'")}', '${topic.replace(/'/g, "\\'")}', '${uploader.replace(/'/g, "\\'")}')">
                 <div class="flex justify-between items-start" style="margin-bottom: 1rem;">
                     <span class="tag tag-${typeClass}">${type || 'Notes'}</span>
                     <span style="font-size: 0.8rem; color: var(--text-muted);">${totalViews} views</span>
@@ -70,10 +72,29 @@ window.HomePage = {
                     data.upvotedBy || [],
                     data.downvotedBy || [],
                     data.viewedBy || [],
-                    data.fileUrl
+                    data.fileUrl,
+                    data.scheme,
+                    data.semester,
+                    data.unit
                 );
             });
             feedGrid.innerHTML = html;
+            
+            // Add search listener
+            const searchInput = document.querySelector('.search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    document.querySelectorAll('.note-card').forEach(card => {
+                        const tags = card.getAttribute('data-search-tags') || '';
+                        if (tags.includes(query)) {
+                            card.style.display = '';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                });
+            }
         } catch (error) {
             console.error("Error fetching notes: ", error);
             feedGrid.innerHTML = '<div style="color: #ff4d4d;">Failed to load notes.</div>';

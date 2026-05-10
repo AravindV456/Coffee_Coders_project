@@ -86,7 +86,7 @@ window.ProfilePage = {
         const isDownvoted = uid && downvotedBy.includes(uid);
         
         return `
-            <div class="note-card" style="cursor: pointer;" onclick="window.handleViewAndOpen('${id}', '${fileUrl}')">
+            <div class="note-card" style="cursor: pointer;" onclick="window.handleViewAndOpen('${id}', '${fileUrl}', '${title.replace(/'/g, "\\'")}', '${topic.replace(/'/g, "\\'")}', '${uploader.replace(/'/g, "\\'")}')">
                 <div class="flex justify-between items-start" style="margin-bottom: 1rem;">
                     <span class="tag tag-${typeClass}">${type || 'Notes'}</span>
                     <span style="font-size: 0.8rem; color: var(--text-muted);">${totalViews} views</span>

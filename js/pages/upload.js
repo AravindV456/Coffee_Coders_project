@@ -44,7 +44,7 @@ window.UploadPage = {
                             <input type="text" id="upload-scheme" class="input-field" placeholder="e.g. 2018 Scheme" required>
                         </div>
                         
-                        <input type="file" id="file-upload" style="display: none;" required>
+                        <input type="file" id="file-upload" multiple style="display: none;" required>
                         <div id="upload-area" style="margin-bottom: 2rem; border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 3rem; text-align: center; cursor: pointer; transition: border-color 0.3s;" onmouseover="this.style.borderColor='var(--accent-primary)'" onmouseout="this.style.borderColor='var(--border-color)'">
                             ${Icons.Upload(32)}
                             <p style="margin-top: 1rem; color: var(--text-secondary);" id="upload-text">Drag and drop your file here or <span style="color: var(--accent-primary);">Browse</span></p>
@@ -68,11 +68,34 @@ window.UploadPage = {
                 fileUpload.click();
             });
             
-            fileUpload.addEventListener('change', () => {
-                if (fileUpload.files.length > 0) {
-                    uploadText.innerHTML = `Selected file: <span style="color: var(--accent-primary);">${fileUpload.files[0].name}</span>`;
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = 'var(--accent-primary)';
+            });
+            
+            uploadArea.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = 'var(--border-color)';
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = 'var(--border-color)';
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    fileUpload.files = e.dataTransfer.files;
+                    updateFileText();
                 }
             });
+            
+            const updateFileText = () => {
+                if (fileUpload.files.length === 1) {
+                    uploadText.innerHTML = `Selected file: <span style="color: var(--accent-primary);">${fileUpload.files[0].name}</span>`;
+                } else if (fileUpload.files.length > 1) {
+                    uploadText.innerHTML = `Selected <span style="color: var(--accent-primary);">${fileUpload.files.length}</span> files`;
+                }
+            };
+            
+            fileUpload.addEventListener('change', updateFileText);
         }
         
         const form = document.getElementById('upload-form');
@@ -86,9 +109,9 @@ window.UploadPage = {
                 return;
             }
             
-            const file = fileUpload.files[0];
-            if (!file) {
-                alert('Please select a file.');
+            const files = Array.from(fileUpload.files);
+            if (files.length === 0) {
+                alert('Please select at least one file.');
                 return;
             }
             
@@ -98,48 +121,52 @@ window.UploadPage = {
             progressText.style.display = 'block';
             
             try {
-                // Upload to Supabase Storage
-                const fileName = `${Date.now()}_${file.name}`;
-                const { data, error } = await supabase.storage
-                    .from('materials')
-                    .upload(fileName, file, {
-                        cacheControl: '3600',
-                        upsert: false
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    progressText.innerText = `Uploading file ${i + 1} of ${files.length}...`;
+                    
+                    // Upload to Supabase Storage
+                    const fileName = `${Date.now()}_${file.name}`;
+                    const { data, error } = await supabase.storage
+                        .from('materials')
+                        .upload(fileName, file, {
+                            cacheControl: '3600',
+                            upsert: false
+                        });
+                    
+                    if (error) {
+                        throw error;
+                    }
+                    
+                    // Get public URL
+                    const { data: publicUrlData } = supabase.storage
+                        .from('materials')
+                        .getPublicUrl(fileName);
+                        
+                    const downloadURL = publicUrlData.publicUrl;
+                    
+                    // Save to Firestore
+                    await addDoc(collection(db, "notes"), {
+                        category: document.getElementById('upload-category').value,
+                        subject: document.getElementById('upload-subject').value,
+                        unit: document.getElementById('upload-unit').value,
+                        topic: document.getElementById('upload-topic').value,
+                        semester: document.getElementById('upload-semester').value,
+                        scheme: document.getElementById('upload-scheme').value,
+                        fileUrl: downloadURL,
+                        fileName: file.name,
+                        uploaderId: AppState.user.uid,
+                        uploaderName: AppState.user.name || 'Anonymous',
+                        views: 0,
+                        viewedBy: [],
+                        upvotedBy: [],
+                        downvotedBy: [],
+                        createdAt: serverTimestamp()
                     });
-                
-                if (error) {
-                    throw error;
                 }
                 
-                progressText.innerText = 'Uploading... 100%';
-                
-                // Get public URL
-                const { data: publicUrlData } = supabase.storage
-                    .from('materials')
-                    .getPublicUrl(fileName);
-                    
-                const downloadURL = publicUrlData.publicUrl;
-                
-                // Save to Firestore
-                await addDoc(collection(db, "notes"), {
-                    category: document.getElementById('upload-category').value,
-                    subject: document.getElementById('upload-subject').value,
-                    unit: document.getElementById('upload-unit').value,
-                    topic: document.getElementById('upload-topic').value,
-                    semester: document.getElementById('upload-semester').value,
-                    scheme: document.getElementById('upload-scheme').value,
-                    fileUrl: downloadURL,
-                    fileName: file.name,
-                    uploaderId: AppState.user.uid,
-                    uploaderName: AppState.user.name || 'Anonymous',
-                    views: 0,
-                    viewedBy: [],
-                    upvotedBy: [],
-                    downvotedBy: [],
-                    createdAt: serverTimestamp()
-                });
-                
-                alert('File uploaded successfully! It is now live on the platform.');
+                progressText.innerText = 'All files uploaded successfully!';
+                alert('Files uploaded successfully! They are now live on the platform.');
                 navigateTo('home');
             } catch (error) {
                 console.error("Error uploading: ", error);

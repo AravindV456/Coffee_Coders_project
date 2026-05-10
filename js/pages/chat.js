@@ -77,51 +77,58 @@ window.ChatPage = {
             }
 
             const usersSnapshot = await getDocs(collection(db, "users"));
-            let html = '';
-            
+            let allUsers = [];
             usersSnapshot.forEach(doc => {
-                const userData = doc.data();
-                if (doc.id !== AppState.user.uid && myChats.some(u => u.uid === doc.id)) {
-                    html += `
-                        <div class="chat-user-item" data-uid="${doc.id}" data-name="${userData.name}" style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
-                            <p style="font-weight: 600; font-size: 0.9rem;">${userData.name}</p>
-                            <p style="font-size: 0.8rem; color: var(--text-secondary);">${userData.course || ''}</p>
-                        </div>
-                    `;
+                if (doc.id !== AppState.user.uid) {
+                    allUsers.push({ id: doc.id, ...doc.data() });
                 }
             });
-            
-            if (html === '') {
-                html = '<div style="padding: 1rem; color: var(--text-muted);">No active chats.</div>';
-            }
-            usersList.innerHTML = html;
-            
-            // Add click listeners
-            document.querySelectorAll('.chat-user-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    // Remove active class from all
-                    document.querySelectorAll('.chat-user-item').forEach(i => i.style.background = 'transparent');
-                    item.style.background = 'rgba(0,230,230,0.05)';
+
+            const renderUsers = (searchQuery = '') => {
+                let html = '';
+                allUsers.forEach(userData => {
+                    const isMatch = searchQuery && (
+                        userData.name.toLowerCase().includes(searchQuery) ||
+                        (userData.course && userData.course.toLowerCase().includes(searchQuery))
+                    );
+                    const isActive = myChats.some(u => u.uid === userData.id);
                     
-                    const uid = item.getAttribute('data-uid');
-                    const name = item.getAttribute('data-name');
-                    this.openChat(uid, name);
+                    if ((!searchQuery && isActive) || isMatch) {
+                        html += `
+                            <div class="chat-user-item" data-uid="${userData.id}" data-name="${userData.name}" style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
+                                <p style="font-weight: 600; font-size: 0.9rem;">${userData.name}</p>
+                                <p style="font-size: 0.8rem; color: var(--text-secondary);">${userData.course || ''}</p>
+                            </div>
+                        `;
+                    }
                 });
-            });
+                
+                if (html === '') {
+                    html = searchQuery ? '<div style="padding: 1rem; color: var(--text-muted);">No users found.</div>' : '<div style="padding: 1rem; color: var(--text-muted);">No active chats.</div>';
+                }
+                usersList.innerHTML = html;
+                
+                // Bind click listeners
+                document.querySelectorAll('.chat-user-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        document.querySelectorAll('.chat-user-item').forEach(i => i.style.background = 'transparent');
+                        item.style.background = 'rgba(0,230,230,0.05)';
+                        
+                        const uid = item.getAttribute('data-uid');
+                        const name = item.getAttribute('data-name');
+                        this.openChat(uid, name);
+                    });
+                });
+            };
+
+            // Initial render
+            renderUsers();
 
             // Add search listener
             const searchInput = document.getElementById('chat-user-search');
             if (searchInput) {
                 searchInput.addEventListener('input', (e) => {
-                    const query = e.target.value.toLowerCase();
-                    document.querySelectorAll('.chat-user-item').forEach(item => {
-                        const name = item.getAttribute('data-name').toLowerCase();
-                        if (name.includes(query)) {
-                            item.style.display = 'block';
-                        } else {
-                            item.style.display = 'none';
-                        }
-                    });
+                    renderUsers(e.target.value.toLowerCase());
                 });
             }
             // If opened with targetUid, open the chat automatically
