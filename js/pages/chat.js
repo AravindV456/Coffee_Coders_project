@@ -1,4 +1,10 @@
-const ChatPage = {
+import { collection, query, onSnapshot, addDoc, serverTimestamp, orderBy, getDocs } from "firebase/firestore";
+import { db } from "../firebase.js";
+
+let currentChatUser = null;
+let unsubscribeMessages = null;
+
+window.ChatPage = {
     render() {
         return `
             <div class="animate-fade-in" style="height: calc(100vh - 150px); display: flex; flex-direction: column;">
@@ -8,47 +14,31 @@ const ChatPage = {
                 </div>
                 
                 <div class="flex gap-4" style="flex: 1; min-height: 0;">
-                    <!-- Chat List -->
+                    <!-- Users List -->
                     <div class="auth-card" style="width: 300px; padding: 0; display: flex; flex-direction: column;">
                         <div style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
-                            <input type="text" class="input-field" style="margin: 0; padding: 8px 12px; font-size: 0.9rem;" placeholder="Search chats...">
+                            <h3 style="margin: 0; font-size: 1rem;">Users</h3>
                         </div>
-                        <div style="flex: 1; overflow-y: auto;">
-                            ${this.renderChatItem('John Doe', 'How can I help you?', '2m ago', true)}
-                            ${this.renderChatItem('Jane Smith', 'The file was approved.', '1h ago', false)}
-                            ${this.renderChatItem('Support Bot', 'Welcome to GoHack!', 'Yesterday', false)}
+                        <div id="chat-users-list" style="flex: 1; overflow-y: auto;">
+                            <div style="padding: 1rem; color: var(--text-muted);">Loading users...</div>
                         </div>
                     </div>
                     
                     <!-- Chat Area -->
                     <div class="auth-card" style="flex: 1; padding: 0; display: flex; flex-direction: column;">
-                        <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
-                            <div class="flex items-center gap-3">
-                                <div style="width: 36px; height: 36px; background: var(--accent-secondary); border-radius: 50%;"></div>
-                                <div>
-                                    <p style="font-weight: 600; font-size: 0.9rem;">John Doe</p>
-                                    <p style="font-size: 0.7rem; color: var(--accent-primary);">Online</p>
-                                </div>
-                            </div>
+                        <div id="chat-header" style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                            <div style="color: var(--text-muted);">Select a user to start chatting</div>
                         </div>
                         
-                        <div style="flex: 1; padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
-                            <div style="align-self: flex-start; max-width: 70%; background: var(--bg-input); padding: 10px 14px; border-radius: 0 12px 12px 12px; font-size: 0.9rem;">
-                                Hello! I saw your message about the Mathematics notes.
-                            </div>
-                            <div style="align-self: flex-end; max-width: 70%; background: var(--accent-primary); color: #000; padding: 10px 14px; border-radius: 12px 12px 0 12px; font-size: 0.9rem; font-weight: 500;">
-                                Hi! Yes, I wanted to clarify a formula in Unit 2.
-                            </div>
-                            <div style="align-self: flex-start; max-width: 70%; background: var(--bg-input); padding: 10px 14px; border-radius: 0 12px 12px 12px; font-size: 0.9rem;">
-                                Sure, go ahead. I'm here to help.
-                            </div>
+                        <div id="chat-messages" style="flex: 1; padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+                            <!-- Messages will appear here -->
                         </div>
                         
                         <div style="padding: 1rem; border-top: 1px solid var(--border-color);">
-                            <div class="flex gap-2">
-                                <input type="text" class="input-field" style="margin: 0;" placeholder="Type your message...">
-                                <button class="btn btn-primary">Send</button>
-                            </div>
+                            <form id="chat-form" class="flex gap-2">
+                                <input type="text" id="chat-input" class="input-field" style="margin: 0;" placeholder="Type your message..." disabled>
+                                <button type="submit" id="chat-send-btn" class="btn btn-primary" disabled>Send</button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -56,16 +46,138 @@ const ChatPage = {
         `;
     },
 
-    renderChatItem(name, lastMsg, time, active) {
-        return `
-            <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; background: ${active ? 'rgba(0,230,230,0.05)' : 'transparent'}; transition: background 0.2s;">
-                <div class="flex justify-between items-center" style="margin-bottom: 4px;">
-                    <p style="font-weight: 600; font-size: 0.9rem;">${name}</p>
-                    <p style="font-size: 0.7rem; color: var(--text-muted);">${time}</p>
+    async init() {
+        if (!AppState.user) {
+            document.getElementById('chat-users-list').innerHTML = '<div style="padding: 1rem; color: #ff4d4d;">Please login to use chat.</div>';
+            return;
+        }
+
+        // Fetch all users to populate the left list
+        try {
+            const usersSnapshot = await getDocs(collection(db, "users"));
+            const usersList = document.getElementById('chat-users-list');
+            let html = '';
+            
+            usersSnapshot.forEach(doc => {
+                const userData = doc.data();
+                if (doc.id !== AppState.user.uid) {
+                    html += `
+                        <div class="chat-user-item" data-uid="${doc.id}" data-name="${userData.name}" style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
+                            <p style="font-weight: 600; font-size: 0.9rem;">${userData.name}</p>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary);">${userData.course || ''}</p>
+                        </div>
+                    `;
+                }
+            });
+            
+            if (html === '') {
+                html = '<div style="padding: 1rem; color: var(--text-muted);">No other users found.</div>';
+            }
+            usersList.innerHTML = html;
+            
+            // Add click listeners
+            document.querySelectorAll('.chat-user-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    // Remove active class from all
+                    document.querySelectorAll('.chat-user-item').forEach(i => i.style.background = 'transparent');
+                    item.style.background = 'rgba(0,230,230,0.05)';
+                    
+                    const uid = item.getAttribute('data-uid');
+                    const name = item.getAttribute('data-name');
+                    this.openChat(uid, name);
+                });
+            });
+        } catch (error) {
+            console.error("Error loading users:", error);
+            document.getElementById('chat-users-list').innerHTML = '<div style="padding: 1rem; color: #ff4d4d;">Failed to load users.</div>';
+        }
+
+        // Handle sending messages
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text || !currentChatUser) return;
+            
+            input.value = '';
+            
+            const chatId = this.getChatId(AppState.user.uid, currentChatUser.uid);
+            
+            try {
+                await addDoc(collection(db, "chats", chatId, "messages"), {
+                    text: text,
+                    senderId: AppState.user.uid,
+                    senderName: AppState.user.name,
+                    createdAt: serverTimestamp()
+                });
+            } catch (error) {
+                console.error("Error sending message:", error);
+                alert("Failed to send message.");
+            }
+        });
+    },
+    
+    getChatId(uid1, uid2) {
+        return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
+    },
+    
+    openChat(targetUid, targetName) {
+        currentChatUser = { uid: targetUid, name: targetName };
+        
+        // Update header
+        document.getElementById('chat-header').innerHTML = `
+            <div class="flex items-center gap-3">
+                <div style="width: 36px; height: 36px; background: var(--accent-secondary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                    ${targetName.charAt(0).toUpperCase()}
                 </div>
-                <p style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
+                <div>
+                    <p style="font-weight: 600; font-size: 0.9rem;">${targetName}</p>
+                </div>
             </div>
         `;
-    },
-    init() {}
+        
+        // Enable input
+        document.getElementById('chat-input').disabled = false;
+        document.getElementById('chat-send-btn').disabled = false;
+        
+        // Subscribe to messages
+        if (unsubscribeMessages) unsubscribeMessages();
+        
+        const chatId = this.getChatId(AppState.user.uid, targetUid);
+        const messagesRef = collection(db, "chats", chatId, "messages");
+        const q = query(messagesRef, orderBy("createdAt", "asc"));
+        
+        const messagesContainer = document.getElementById('chat-messages');
+        messagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted);">Loading messages...</div>';
+        
+        unsubscribeMessages = onSnapshot(q, (snapshot) => {
+            let html = '';
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const isMe = data.senderId === AppState.user.uid;
+                
+                if (isMe) {
+                    html += `
+                        <div style="align-self: flex-end; max-width: 70%; background: var(--accent-primary); color: #000; padding: 10px 14px; border-radius: 12px 12px 0 12px; font-size: 0.9rem; font-weight: 500;">
+                            ${data.text}
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div style="align-self: flex-start; max-width: 70%; background: var(--bg-input); padding: 10px 14px; border-radius: 0 12px 12px 12px; font-size: 0.9rem;">
+                            ${data.text}
+                        </div>
+                    `;
+                }
+            });
+            
+            if (html === '') {
+                html = '<div style="text-align: center; color: var(--text-muted); margin-top: auto; margin-bottom: auto;">No messages yet. Say hi!</div>';
+            }
+            
+            messagesContainer.innerHTML = html;
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        });
+    }
 };

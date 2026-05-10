@@ -1,4 +1,4 @@
-const RecentsPage = {
+window.RecentsPage = {
     render() {
         const history = [
             { title: 'Compiler Design', topic: 'Intermediate Code Generation', date: 'Oct 24, 2023', time: '14:30', uploader: 'Prof. Miller' },

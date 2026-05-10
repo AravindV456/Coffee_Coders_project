@@ -1,4 +1,8 @@
-const AuthPage = {
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut } from "firebase/auth";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase.js";
+
+window.AuthPage = {
     render() {
         const isLogin = AppState.currentPage === 'login';
         const bgImage = isLogin ? 'assets/background1.png' : 'assets/background2.png';
@@ -29,8 +33,8 @@ const AuthPage = {
 
     renderLoginForm() {
         return `
-            <input type="text" id="user-id" class="input-field" placeholder="User ID" required>
-            <input type="password" id="password" class="input-field" placeholder="Password" required>
+            <input type="email" id="login-email" class="input-field" placeholder="Email" required>
+            <input type="password" id="login-password" class="input-field" placeholder="Password" required>
             <button type="submit" class="btn btn-primary w-full" style="margin-top: 1rem;">Login</button>
         `;
     },
@@ -63,31 +67,80 @@ const AuthPage = {
             navigateTo(AppState.currentPage === 'login' ? 'signup' : 'login');
         });
 
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (AppState.currentPage === 'signup') {
-                const otpContainer = document.getElementById('otp-container');
-                const signupBtn = document.getElementById('signup-btn');
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const name = document.getElementById('name').value;
+                const course = document.getElementById('course').value;
+                const semester = document.getElementById('semester').value;
+                const university = document.getElementById('university').value;
+                const scheme = document.getElementById('scheme').value;
+                const userId = document.getElementById('user-id').value;
                 
-                if (otpContainer.style.display === 'none') {
-                    otpContainer.style.display = 'block';
-                    signupBtn.textContent = 'Verify OTP & Create Account';
-                    alert('OTP sent! (Mock: 1234)');
-                } else {
-                    alert('Account Created Successfully!');
+                try {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+                    
+                    // Save user info to Firestore
+                    await setDoc(doc(db, "users", user.uid), {
+                        id: userId,
+                        name: name,
+                        course: course,
+                        semester: semester,
+                        university: university,
+                        scheme: scheme,
+                        email: email
+                    });
+                    
+                    try {
+                        await sendEmailVerification(user);
+                        alert('Account Created Successfully! Please check your email to verify your account before logging in.');
+                    } catch (emailError) {
+                        console.error('Email verification error:', emailError);
+                        alert('Account created, but failed to send verification email. You can resend it by trying to log in.');
+                    }
+                    
                     navigateTo('login');
+                } catch (error) {
+                    alert('Error signing up: ' + error.message);
                 }
             } else {
-                // Mock login
-                AppState.user = {
-                    id: document.getElementById('user-id').value,
-                    name: 'Student Name',
-                    course: 'B.Tech CSE',
-                    semester: '6th',
-                    scheme: '2022',
-                    email: 'student@university.edu'
-                };
-                navigateTo('home');
+                const email = document.getElementById('login-email').value;
+                const password = document.getElementById('login-password').value;
+                try {
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+                    
+                    await user.reload();
+                    
+                    if (!user.emailVerified) {
+                        const resend = confirm('Please verify your email address before logging in. Check your inbox/spam folder. Click OK if you want us to resend the verification email.');
+                        if (resend) {
+                            try {
+                                await sendEmailVerification(user);
+                                alert('Verification email resent! Please check your inbox.');
+                            } catch (e) {
+                                alert('Failed to resend email: ' + e.message);
+                            }
+                        }
+                        await signOut(auth);
+                        return;
+                    }
+                    
+                    // Get user info from Firestore
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) {
+                        AppState.user = { uid: user.uid, ...userDoc.data() };
+                    } else {
+                        AppState.user = { uid: user.uid, email: user.email, name: 'User', id: 'N/A', course: 'N/A', semester: 'N/A', scheme: 'N/A' };
+                    }
+                    
+                    navigateTo('home');
+                } catch (error) {
+                    alert('Error logging in: ' + error.message);
+                }
             }
         });
     }

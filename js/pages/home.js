@@ -1,71 +1,71 @@
-const HomePage = {
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { db } from "../firebase.js";
+
+window.HomePage = {
     render() {
         return `
             <div class="animate-fade-in">
-                <header class="topbar">
-                    <button class="menu-toggle" id="menu-toggle">
-                        ${Icons.Menu()}
-                    </button>
-                    
-                    <div class="search-container">
-                        <span class="search-icon">${Icons.Search()}</span>
-                        <input type="text" class="search-input" placeholder="Search notes, PYQs, subjects...">
-                    </div>
-                    
-                    <div style="width: 40px;"></div> <!-- Spacer -->
-                </header>
 
                 <section style="margin-bottom: 2rem;">
-                    <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Recommended for you</h2>
-                    <div class="feed-grid">
-                        ${this.renderNoteCard('Engineering Mathematics', 'Unit 2: Calculus', 'Notes', '3.2k', 'John Doe')}
-                        ${this.renderNoteCard('Data Structures', 'PYQ 2023 - Semester 4', 'PYQs', '1.5k', 'Jane Smith')}
-                        ${this.renderNoteCard('Database Systems', 'Short Notes: SQL Queries', 'Short Notes', '850', 'Alex Chen')}
-                        ${this.renderNoteCard('Operating Systems', 'Reference Book: Silberschatz', 'Reference Book', '2.1k', 'Admin')}
-                        ${this.renderNoteCard('Digital Electronics', 'Unit 1: Logic Gates', 'Notes', '1.1k', 'Sarah Lee')}
-                        ${this.renderNoteCard('Computer Networks', 'OSI Model Detailed', 'Notes', '4.3k', 'Mike Ross')}
+                    <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Recent Uploads</h2>
+                    <div class="feed-grid" id="home-feed-grid">
+                        <div style="color: var(--text-muted);">Loading notes...</div>
                     </div>
                 </section>
             </div>
         `;
     },
 
-    renderNoteCard(title, topic, type, views, uploader) {
-        const typeClass = type.toLowerCase().replace(' ', '-');
+    renderNoteCard(title, topic, type, views, uploader, fileUrl) {
+        const typeClass = type ? type.toLowerCase().replace(' ', '-') : 'notes';
         return `
             <div class="note-card">
                 <div class="flex justify-between items-start" style="margin-bottom: 1rem;">
-                    <span class="tag tag-${typeClass}">${type}</span>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);">${views} views</span>
+                    <span class="tag tag-${typeClass}">${type || 'Notes'}</span>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">${views || 0} views</span>
                 </div>
                 <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem;">${title}</h3>
                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">${topic}</p>
                 <p style="color: var(--text-muted); font-size: 0.8rem;"><b>${uploader}</b></p>
                 
                 <div class="card-actions">
-                    <button class="action-btn">${Icons.ArrowUp()} <span>124</span></button>
-                    <button class="action-btn">${Icons.ArrowDown()} <span>12</span></button>
-                    <button class="action-btn">${Icons.MessageCircle(18)} <span>18</span></button>
-                    <button class="action-btn" style="margin-left: auto;" onclick="navigateTo('chat')">Chat</button>
+                    <button class="action-btn">${Icons.ArrowUp()} <span>0</span></button>
+                    <button class="action-btn">${Icons.ArrowDown()} <span>0</span></button>
+                    <button class="action-btn" style="margin-left: auto;" onclick="window.open('${fileUrl}', '_blank')">View</button>
                 </div>
             </div>
         `;
     },
 
-    init() {
-        const menuToggle = document.getElementById('menu-toggle');
-        menuToggle.addEventListener('click', () => {
-            AppState.sidebarOpen = !AppState.sidebarOpen;
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.querySelector('.main-content');
+    async init() {
+        const feedGrid = document.getElementById('home-feed-grid');
+        if (!feedGrid) return;
+        
+        try {
+            const q = query(collection(db, "notes"), orderBy("createdAt", "desc"));
+            const querySnapshot = await getDocs(q);
             
-            if (AppState.sidebarOpen) {
-                sidebar.classList.remove('sidebar-hidden');
-                mainContent.classList.add('sidebar-open');
-            } else {
-                sidebar.classList.add('sidebar-hidden');
-                mainContent.classList.remove('sidebar-open');
+            if (querySnapshot.empty) {
+                feedGrid.innerHTML = '<div style="color: var(--text-muted);">No notes found. Be the first to upload!</div>';
+                return;
             }
-        });
+            
+            let html = '';
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                html += this.renderNoteCard(
+                    data.subject,
+                    data.topic,
+                    data.category,
+                    data.views,
+                    data.uploaderName,
+                    data.fileUrl
+                );
+            });
+            feedGrid.innerHTML = html;
+        } catch (error) {
+            console.error("Error fetching notes: ", error);
+            feedGrid.innerHTML = '<div style="color: #ff4d4d;">Failed to load notes.</div>';
+        }
     }
 };

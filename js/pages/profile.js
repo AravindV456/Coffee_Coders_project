@@ -1,4 +1,7 @@
-const ProfilePage = {
+import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { db } from "../firebase.js";
+
+window.ProfilePage = {
     render() {
         const u = AppState.user || { id: 'N/A', name: 'N/A', course: 'N/A', email: 'N/A', semester: 'N/A', scheme: 'N/A', bio: '' };
         const isEditing = AppState.isEditingProfile || false;
@@ -62,10 +65,39 @@ const ProfilePage = {
                         ${isEditing ? `<button type="submit" class="btn btn-primary w-full">Save Changes</button>` : ''}
                     </div>
                 </form>
+                
+                <div class="auth-card" style="margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">My Uploads</h3>
+                    <div class="feed-grid" id="profile-feed-grid">
+                        <div style="color: var(--text-muted);">Loading your uploads...</div>
+                    </div>
+                </div>
             </div>
         `;
     },
-    init() {
+    
+    renderNoteCard(title, topic, type, views, uploader, upvotes = 0, downvotes = 0, comments = 0, fileUrl = '#') {
+        const typeClass = type ? type.toLowerCase().replace(' ', '-') : 'notes';
+        return `
+            <div class="note-card">
+                <div class="flex justify-between items-start" style="margin-bottom: 1rem;">
+                    <span class="tag tag-${typeClass}">${type || 'Notes'}</span>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">${views || 0} views</span>
+                </div>
+                <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem;">${title}</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">${topic}</p>
+                <p style="color: var(--text-muted); font-size: 0.8rem;"><b>${uploader}</b></p>
+                
+                <div class="card-actions">
+                    <button class="action-btn">${Icons.ArrowUp()} <span>${upvotes}</span></button>
+                    <button class="action-btn">${Icons.ArrowDown()} <span>${downvotes}</span></button>
+                    <button class="action-btn" style="margin-left: auto;" onclick="window.open('${fileUrl}', '_blank')">View</button>
+                </div>
+            </div>
+        `;
+    },
+
+    async init() {
         const editBtn = document.getElementById('edit-profile-btn');
         if (editBtn) {
             editBtn.addEventListener('click', () => {
@@ -78,6 +110,7 @@ const ProfilePage = {
         if (form) {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
+                // We'd typically update Firestore here, keeping it mock for now
                 AppState.user = {
                     ...AppState.user,
                     name: document.getElementById('edit-name').value,
@@ -91,6 +124,39 @@ const ProfilePage = {
                 alert('Profile updated successfully!');
                 renderApp();
             });
+        }
+        
+        // Fetch user notes
+        const feedGrid = document.getElementById('profile-feed-grid');
+        if (feedGrid && AppState.user && AppState.user.uid) {
+            try {
+                const q = query(collection(db, "notes"), where("uploaderId", "==", AppState.user.uid), orderBy("createdAt", "desc"));
+                getDocs(q).then(querySnapshot => {
+                    if (querySnapshot.empty) {
+                        feedGrid.innerHTML = '<div style="color: var(--text-muted);">You haven\'t uploaded any notes yet.</div>';
+                    } else {
+                        let html = '';
+                        querySnapshot.forEach((doc) => {
+                            const data = doc.data();
+                            html += this.renderNoteCard(
+                                data.subject,
+                                data.topic,
+                                data.category,
+                                data.views,
+                                data.uploaderName,
+                                data.upvotes || 0,
+                                data.downvotes || 0,
+                                0,
+                                data.fileUrl
+                            );
+                        });
+                        feedGrid.innerHTML = html;
+                    }
+                });
+            } catch (error) {
+                console.error("Error fetching user notes: ", error);
+                feedGrid.innerHTML = '<div style="color: #ff4d4d;">Failed to load your notes.</div>';
+            }
         }
     }
 };

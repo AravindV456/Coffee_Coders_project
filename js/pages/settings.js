@@ -1,4 +1,4 @@
-const SettingsPage = {
+window.SettingsPage = {
     render() {
         const isDark = AppState.theme === 'dark';
         return `
