@@ -1,4 +1,5 @@
 import './components/icons.js';
+import { initParticles } from './components/particles.js';
 import './pages/auth.js';
 import './components/sidebar.js';
 import './pages/home.js';
@@ -7,6 +8,9 @@ import './pages/recents.js';
 import './pages/upload.js';
 import './pages/settings.js';
 import './pages/chat.js';
+import './pages/publicProfile.js';
+import { db } from './firebase.js';
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 window.AppState = {
     user: null,
@@ -68,10 +72,21 @@ window.renderApp = function() {
             case 'upload': contentHtml = UploadPage.render(); break;
             case 'settings': contentHtml = SettingsPage.render(); break;
             case 'chat': contentHtml = ChatPage.render(); break;
+            case 'publicProfile': contentHtml = window.PublicProfilePage.render(); break;
             default: contentHtml = HomePage.render();
         }
         
-        mainContent.innerHTML = topbarHtml + contentHtml;
+        const footerHtml = `
+            <footer style="margin-top: 4rem; padding-top: 2rem; padding-bottom: 2rem; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-muted); font-size: 0.9rem;">
+                <p style="margin-bottom: 0.5rem;">Designed By Aravind V Kumar and Devapriya R</p>
+                <div style="display: flex; justify-content: center; gap: 1rem;">
+                    <a href="https://www.linkedin.com/in/aravind-v-kumar-6818b0257/" target="_blank" style="color: var(--accent-primary);">Aravind's LinkedIn</a>
+                    <a href="https://www.linkedin.com/in/devapriya-r-099433337?utm_source=share_via&utm_content=profile&utm_medium=member_android" target="_blank" style="color: var(--accent-primary);">Devapriya's LinkedIn</a>
+                </div>
+            </footer>
+        `;
+        
+        mainContent.innerHTML = topbarHtml + contentHtml + footerHtml;
         layout.appendChild(mainContent);
         appContainer.appendChild(layout);
         
@@ -105,16 +120,92 @@ window.initCurrentPage = function() {
         case 'upload': UploadPage.init(); break;
         case 'settings': SettingsPage.init(); break;
         case 'chat': ChatPage.init(); break;
+        case 'publicProfile': window.PublicProfilePage.init(); break;
     }
 }
 
-window.navigateTo = function(page) {
+window.navigateTo = function(page, data = null) {
     AppState.currentPage = page;
+    if (data) AppState.pageData = data;
     renderApp();
     window.scrollTo(0, 0);
 }
 
 // Initial render
 document.addEventListener('DOMContentLoaded', () => {
+    initParticles();
     renderApp();
 });
+
+window.handleVote = async function(noteId, voteType, event) {
+    event.stopPropagation();
+    if (!AppState.user) {
+        alert("Please login to vote.");
+        return;
+    }
+    const noteRef = doc(db, 'notes', noteId);
+    try {
+        const noteSnap = await getDoc(noteRef);
+        if (noteSnap.exists()) {
+            const data = noteSnap.data();
+            let upvotedBy = data.upvotedBy || [];
+            let downvotedBy = data.downvotedBy || [];
+            const uid = AppState.user.uid;
+
+            if (voteType === 'up') {
+                if (upvotedBy.includes(uid)) {
+                    upvotedBy = upvotedBy.filter(id => id !== uid);
+                } else {
+                    upvotedBy.push(uid);
+                    downvotedBy = downvotedBy.filter(id => id !== uid);
+                }
+            } else if (voteType === 'down') {
+                if (downvotedBy.includes(uid)) {
+                    downvotedBy = downvotedBy.filter(id => id !== uid);
+                } else {
+                    downvotedBy.push(uid);
+                    upvotedBy = upvotedBy.filter(id => id !== uid);
+                }
+            }
+
+            await updateDoc(noteRef, { upvotedBy, downvotedBy });
+            renderApp(); // Refresh UI to show new counts
+        }
+    } catch (e) {
+        console.error("Error voting:", e);
+    }
+};
+
+window.handleViewAndOpen = async function(noteId, fileUrl, title, topic, uploader) {
+    // Open the file immediately in a new tab for good UX
+    window.open(fileUrl, '_blank');
+    
+    // Save to local storage for Recents tab
+    try {
+        let recents = JSON.parse(localStorage.getItem('recentNotes') || '[]');
+        // Remove if exists to push to top
+        recents = recents.filter(n => n.noteId !== noteId);
+        recents.unshift({
+            noteId, title, topic, uploader, fileUrl, timestamp: new Date().toISOString()
+        });
+        // Keep only top 20
+        if (recents.length > 20) recents = recents.slice(0, 20);
+        localStorage.setItem('recentNotes', JSON.stringify(recents));
+    } catch (e) {
+        console.error("Error saving recents:", e);
+    }
+
+    // Track unique views for logged-in users
+    if (!AppState.user) return;
+    
+    try {
+        const noteRef = doc(db, 'notes', noteId);
+        await updateDoc(noteRef, {
+            viewedBy: arrayUnion(AppState.user.uid)
+        });
+        // Render app to update the view counter visually if the user returns to this tab
+        renderApp();
+    } catch (e) {
+        console.error("Error updating views:", e);
+    }
+};

@@ -133,8 +133,9 @@ window.UploadPage = {
                     uploaderId: AppState.user.uid,
                     uploaderName: AppState.user.name || 'Anonymous',
                     views: 0,
-                    upvotes: 0,
-                    downvotes: 0,
+                    viewedBy: [],
+                    upvotedBy: [],
+                    downvotedBy: [],
                     createdAt: serverTimestamp()
                 });
                 

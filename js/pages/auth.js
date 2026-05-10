@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase.js";
 
@@ -35,6 +35,9 @@ window.AuthPage = {
         return `
             <input type="email" id="login-email" class="input-field" placeholder="Email" required>
             <input type="password" id="login-password" class="input-field" placeholder="Password" required>
+            <div style="text-align: right; margin-top: 0.5rem;">
+                <a href="#" id="forgot-password-link" style="font-size: 0.8rem; color: var(--accent-primary); text-decoration: none;">Forgot Password?</a>
+            </div>
             <button type="submit" class="btn btn-primary w-full" style="margin-top: 1rem;">Login</button>
         `;
     },
@@ -66,6 +69,22 @@ window.AuthPage = {
             e.preventDefault();
             navigateTo(AppState.currentPage === 'login' ? 'signup' : 'login');
         });
+
+        const forgotPasswordLink = document.getElementById('forgot-password-link');
+        if (forgotPasswordLink) {
+            forgotPasswordLink.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const email = prompt("Enter your email address to reset your password:");
+                if (email && email.trim() !== '') {
+                    try {
+                        await sendPasswordResetEmail(auth, email.trim());
+                        alert("Password reset email sent! Please check your inbox or spam folder.");
+                    } catch (error) {
+                        alert("Error sending reset email: " + error.message);
+                    }
+                }
+            });
+        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -134,7 +153,18 @@ window.AuthPage = {
                     if (userDoc.exists()) {
                         AppState.user = { uid: user.uid, ...userDoc.data() };
                     } else {
-                        AppState.user = { uid: user.uid, email: user.email, name: 'User', id: 'N/A', course: 'N/A', semester: 'N/A', scheme: 'N/A' };
+                        // Fix for legacy missing user accounts: add them to Firestore automatically
+                        const defaultData = { 
+                            id: 'N/A', 
+                            name: user.email.split('@')[0] || 'Legacy User', 
+                            course: 'N/A', 
+                            semester: 'N/A', 
+                            university: 'N/A', 
+                            scheme: 'N/A', 
+                            email: user.email 
+                        };
+                        await setDoc(doc(db, "users", user.uid), defaultData);
+                        AppState.user = { uid: user.uid, ...defaultData };
                     }
                     
                     navigateTo('home');

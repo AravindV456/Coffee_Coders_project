@@ -18,6 +18,7 @@ window.ChatPage = {
                     <div class="auth-card" style="width: 300px; padding: 0; display: flex; flex-direction: column;">
                         <div style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
                             <h3 style="margin: 0; font-size: 1rem;">Users</h3>
+                            <input type="text" id="chat-user-search" class="input-field" style="margin-top: 0.5rem; margin-bottom: 0; padding: 0.5rem;" placeholder="Search users...">
                         </div>
                         <div id="chat-users-list" style="flex: 1; overflow-y: auto;">
                             <div style="padding: 1rem; color: var(--text-muted);">Loading users...</div>
@@ -52,15 +53,35 @@ window.ChatPage = {
             return;
         }
 
-        // Fetch all users to populate the left list
+        // Fetch active chats
         try {
-            const usersSnapshot = await getDocs(collection(db, "users"));
+            let activeChats = JSON.parse(localStorage.getItem('activeChats') || '{}');
+            let myChats = activeChats[AppState.user.uid] || [];
+            
+            // If target passed from profile, ensure they are in the list
+            if (AppState.pageData && AppState.pageData.targetUid) {
+                if (!myChats.some(u => u.uid === AppState.pageData.targetUid)) {
+                    myChats.push({ uid: AppState.pageData.targetUid, name: AppState.pageData.targetName });
+                    activeChats[AppState.user.uid] = myChats;
+                    localStorage.setItem('activeChats', JSON.stringify(activeChats));
+                }
+            }
+
             const usersList = document.getElementById('chat-users-list');
+
+            if (myChats.length === 0) {
+                usersList.innerHTML = '<div style="padding: 1rem; color: var(--text-muted);">No active chats. Visit a user\'s profile to message them.</div>';
+                // Remove pageData target so we don't accidentally open it again if returning
+                AppState.pageData = null;
+                return;
+            }
+
+            const usersSnapshot = await getDocs(collection(db, "users"));
             let html = '';
             
             usersSnapshot.forEach(doc => {
                 const userData = doc.data();
-                if (doc.id !== AppState.user.uid) {
+                if (doc.id !== AppState.user.uid && myChats.some(u => u.uid === doc.id)) {
                     html += `
                         <div class="chat-user-item" data-uid="${doc.id}" data-name="${userData.name}" style="padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
                             <p style="font-weight: 600; font-size: 0.9rem;">${userData.name}</p>
@@ -71,7 +92,7 @@ window.ChatPage = {
             });
             
             if (html === '') {
-                html = '<div style="padding: 1rem; color: var(--text-muted);">No other users found.</div>';
+                html = '<div style="padding: 1rem; color: var(--text-muted);">No active chats.</div>';
             }
             usersList.innerHTML = html;
             
@@ -87,6 +108,33 @@ window.ChatPage = {
                     this.openChat(uid, name);
                 });
             });
+
+            // Add search listener
+            const searchInput = document.getElementById('chat-user-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    document.querySelectorAll('.chat-user-item').forEach(item => {
+                        const name = item.getAttribute('data-name').toLowerCase();
+                        if (name.includes(query)) {
+                            item.style.display = 'block';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            }
+            // If opened with targetUid, open the chat automatically
+            if (AppState.pageData && AppState.pageData.targetUid) {
+                this.openChat(AppState.pageData.targetUid, AppState.pageData.targetName);
+                // Highlight the user in list
+                document.querySelectorAll('.chat-user-item').forEach(item => {
+                    if (item.getAttribute('data-uid') === AppState.pageData.targetUid) {
+                        item.style.background = 'rgba(0,230,230,0.05)';
+                    }
+                });
+                AppState.pageData = null; // consume it
+            }
         } catch (error) {
             console.error("Error loading users:", error);
             document.getElementById('chat-users-list').innerHTML = '<div style="padding: 1rem; color: #ff4d4d;">Failed to load users.</div>';
