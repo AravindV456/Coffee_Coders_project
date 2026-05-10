@@ -65,4 +65,4 @@ This application is built with Vite, meaning it generates highly optimized stati
 ---
 
 ## 🔗 Deployed Website
-**Live Demo:** [Insert Deployed Website Link Here]
+**Live Demo:** [https://project-uphgn.vercel.app/]
