@@ -247,7 +247,7 @@ window.ChatPage = {
                 }
                 
                 if (isMe) {
-                    const receiptIcon = data.read ? `<span style="color: #00e6e6; margin-left: 4px; vertical-align: middle;">${Icons.CheckDouble()}</span>` : `<span style="color: rgba(255,255,255,0.5); margin-left: 4px; vertical-align: middle;">${Icons.Check()}</span>`;
+                    const receiptIcon = data.read ? `<span style="color: #00e6e6; margin-left: 4px; vertical-align: middle;">${Icons.CheckDouble()}</span>` : `<span style="color: rgba(0, 68, 204, 1.0); margin-left: 4px; vertical-align: middle;">${Icons.Check()}</span>`;
                     html += `
                         <div style="align-self: flex-end; max-width: 70%; background: var(--accent-primary); color: #000; padding: 10px 14px; border-radius: 12px 12px 0 12px; font-size: 0.9rem; font-weight: 500;">
                             ${data.text}
